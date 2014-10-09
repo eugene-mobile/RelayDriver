@@ -9,16 +9,39 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.Toast;
 import android.widget.ToggleButton;
+
+import java.util.HashMap;
+import java.util.Map;
+
 import ca.appspace.relaydriver.service.RelayDriverService;
 import ca.appspace.relaydriver.service.RelayDriverService.LocalBinder;
+import ca.appspace.relaydriver.service.RelayStatusCallback;
 
 public class MainActivity extends Activity {
 	
 	private RelayDriverService _relayDriver;
-	
+
+    private Map<Integer, ToggleButton> buttons = new HashMap<Integer, ToggleButton>();
+
+	private RelayStatusCallback _relayStatusCallback = new RelayStatusCallback() {
+        @Override
+        public void onRelayStatusChanged(final int relayNum, final boolean newValue) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    ToggleButton btn = buttons.get(relayNum);
+                    if (btn!=null) {
+                        btn.setChecked(newValue);
+                    }
+                }
+            });
+        }
+    };
+
 	private ServiceConnection _driverConnection = new ServiceConnection() {
 		@Override
 		public void onServiceDisconnected(ComponentName name) {
@@ -29,6 +52,7 @@ public class MainActivity extends Activity {
 		public void onServiceConnected(ComponentName name, IBinder service) {
 			LocalBinder binder = (LocalBinder) service;
 			_relayDriver = binder.getService();
+            _relayDriver.setRelayStatusCallback(_relayStatusCallback);
 		}
 	};
 	
@@ -50,50 +74,53 @@ public class MainActivity extends Activity {
 		setContentView(R.layout.activity_main);
 		
 		final ToggleButton relayBtn1 = (ToggleButton) findViewById(R.id.relayButton1);
-		relayBtn1.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-		    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-		        setRelay(relayBtn1, 1, isChecked);
-		    }
-		});
+        relayBtn1.setOnClickListener(new CompoundButton.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                setRelay(relayBtn1, 1, relayBtn1.isChecked());
+            }
+        });
+        buttons.put(1, relayBtn1);
 
 		final ToggleButton relayBtn2 = (ToggleButton) findViewById(R.id.relayButton2);
-		relayBtn2.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-		    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-		        setRelay(relayBtn2, 2, isChecked);
-		    }
-		});
+        relayBtn2.setOnClickListener(new CompoundButton.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                setRelay(relayBtn2, 2, relayBtn2.isChecked());
+            }
+        });
+        buttons.put(2, relayBtn2);
 
 		final ToggleButton relayBtn3 = (ToggleButton) findViewById(R.id.relayButton3);
-		relayBtn3.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-		    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-		        setRelay(relayBtn3, 3, isChecked);
-		    }
-		});
+        relayBtn3.setOnClickListener(new CompoundButton.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                setRelay(relayBtn3, 3, relayBtn3.isChecked());
+            }
+        });
+        buttons.put(3, relayBtn3);
 
 		final ToggleButton relayBtn4 = (ToggleButton) findViewById(R.id.relayButton4);
-		relayBtn4.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-		    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-		        setRelay(relayBtn4, 4, isChecked);
-		    }
-		});
+        relayBtn4.setOnClickListener(new CompoundButton.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                setRelay(relayBtn4, 4, relayBtn4.isChecked());
+            }
+        });
+        buttons.put(4, relayBtn4);
 
 		final ToggleButton relayBtn5 = (ToggleButton) findViewById(R.id.relayButton5);
-		relayBtn5.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-		    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-		        setRelay(relayBtn5, 5, isChecked);
-		    }
-		});
-
+		relayBtn5.setOnClickListener(new CompoundButton.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                setRelay(relayBtn5, 5, relayBtn5.isChecked());
+            }
+        });
+        buttons.put(5, relayBtn5);
 	}
 
 	private void setRelay(ToggleButton source, int relayNumber, boolean isChecked) {
-		boolean result = _relayDriver.setRelayValue(relayNumber, isChecked);
-		if (result==isChecked) {
-			Toast.makeText(this, "Relay #"+relayNumber+" set to "+isChecked, Toast.LENGTH_SHORT).show();
-		} else {
-			Toast.makeText(this, "Error changing relay "+relayNumber+" value", Toast.LENGTH_SHORT).show();
-			source.setChecked(result);
-		}
+		_relayDriver.setRelayValue(relayNumber, isChecked);
 	}
 	
 	@Override

@@ -9,6 +9,8 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import android.app.Service;
 import android.content.Intent;
@@ -17,46 +19,44 @@ import android.os.IBinder;
 import android.util.Log;
 
 public class RelayDriverService extends Service {
+
     public static int RELAY_PORT = 1981;
     public static String RELAY_HARDWARE_ADDR = "216.48.168.68";
 	public static final String RELAY_NUMBER_PARAM = "relayNumber";
 	public static final String RELAY_VALUE_PARAM = "relayValue";
-
-	private final IBinder _binder = new LocalBinder();
+    private volatile TCPRelayClient _tcpClient = null;
+    private volatile Object _initLock = new Object();
+    private final IBinder _binder = new LocalBinder();
+    private RelayStatusCallback _relaRelayStatusCallback;
+    private final static String RELAY_STATUS_PATTERN = "^Relay #(\\d+) is turned (ON|OFF)$";
+    private final static String LOG_TAG = RelayDriverService.class.getSimpleName();
 
 	@Override
 	public IBinder onBind(Intent intent) {
-		new Thread() {
-			public void run() {
-                Socket socket = null;
-                DataOutputStream dataOutputStream = null;
-                DataInputStream dataInputStream = null;
-                try {
-					socket = new Socket();
-                    socket.setSoTimeout(30000);
-					socket.connect(new InetSocketAddress(RELAY_HARDWARE_ADDR, RELAY_PORT));
-                    dataOutputStream = new DataOutputStream(socket.getOutputStream());
-                    dataInputStream = new DataInputStream(socket.getInputStream());
-                    dataOutputStream.writeBytes("Hello");
-                    dataOutputStream.flush();
-                    StringBuilder sb = new StringBuilder();
-                    while (dataInputStream.available()>0) {
-                        sb.append(dataInputStream.readChar());
-                    }
-                    Log.i("", "Line read: "+sb.toString());
-				} catch (Exception e) {
-                    Log.e("", "Error opening socket", e);
-                } finally {
-                    safeClose(dataOutputStream);
-                    safeClose(dataInputStream);
-                    safeClose(socket);
-                }
-			}
-		}.start();
+        if (_tcpClient==null) {
+            initClient();
+        }
 		return _binder;
 	}
-	
-	public class LocalBinder extends Binder {
+
+    private void parseResponse(String data) {
+        Log.i(LOG_TAG, "ResponseReceived: "+data);
+        Pattern p = Pattern.compile(RELAY_STATUS_PATTERN);
+        Matcher m = p.matcher(data);
+        if (m.matches() && m.groupCount()>1) {
+            int relayNum = Integer.parseInt(m.group(1));
+            boolean status = "ON".equalsIgnoreCase(m.group(2));
+            if (_relaRelayStatusCallback!=null) {
+                _relaRelayStatusCallback.onRelayStatusChanged(relayNum, status);
+            }
+        }
+    }
+
+    public void setRelayStatusCallback(RelayStatusCallback relayStatusCallback) {
+        _relaRelayStatusCallback = relayStatusCallback;
+    }
+
+    public class LocalBinder extends Binder {
 		public RelayDriverService getService() {
             return RelayDriverService.this;
         }
@@ -66,13 +66,14 @@ public class RelayDriverService extends Service {
 		new Thread() {
 			public void run() {
 				try {
-                    Socket socket = new Socket();
-					socket.connect(new InetSocketAddress(RELAY_HARDWARE_ADDR, RELAY_PORT));
-					OutputStream stream = socket.getOutputStream();
-					stream.write(new byte[]{(byte) (relayNumber+48)});
-					stream.close();
+                    if (_tcpClient==null) {
+                        initClient();
+                    }
+                    _tcpClient.sendCommand(String.valueOf(relayNumber));
+                    Thread.sleep(100);
+                    _tcpClient.sendCommand("s");
 				} catch (Exception e) {
-					Log.e("", "Error writing to socket", e);
+					Log.e(LOG_TAG, "Error writing to socket", e);
 				}
 			}
 		}.start();
@@ -81,11 +82,34 @@ public class RelayDriverService extends Service {
 		return isChecked;
 	}
 
-    private void safeClose(Closeable cl) {
-        if (cl==null) return;
-        try {
-            cl.close();
-        } catch (Throwable e) {}
+    private void initClient() {
+        if (_tcpClient==null) {
+            synchronized (_initLock) {
+                new Thread() {
+                    public void run() {
+                        if (_tcpClient!=null) return;
+                        _tcpClient = new TCPRelayClient(RELAY_HARDWARE_ADDR, RELAY_PORT);
+                        _tcpClient.addDataCallback(new NewDataAvailableCallback() {
+                            @Override
+                            public void onNewDataAvailable(String data) {
+                                parseResponse(data);
+                            }
+                        });
+                        try {
+                            _tcpClient.connect();
+                            _tcpClient.sendCommand("?");
+                            try {
+                                Thread.sleep(200);
+                            } catch (InterruptedException e) {}
+                            _tcpClient.sendCommand("s");
+                        } catch (Exception e) {
+                            Log.e(LOG_TAG, "Error connecting to remote relays", e);
+                        }
+
+                    }
+                }.start();
+            }
+        }
     }
 
 }
