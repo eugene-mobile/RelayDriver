@@ -19,7 +19,7 @@ public class MainActivity extends Activity {
 	
 	private RelayDriverService _relayDriver;
 	
-	private ServiceConnection _dataDriverConnection = new ServiceConnection() {
+	private ServiceConnection _driverConnection = new ServiceConnection() {
 		@Override
 		public void onServiceDisconnected(ComponentName name) {
 			_relayDriver = null;
@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
 	protected void onStart() {
 		super.onStart();
 		Intent startRelayDriverIntent = new Intent(this, RelayDriverService.class);
-		boolean bindSuccess = bindService(startRelayDriverIntent, _dataDriverConnection, Context.BIND_AUTO_CREATE);
+		boolean bindSuccess = bindService(startRelayDriverIntent, _driverConnection, Context.BIND_AUTO_CREATE);
 		if (bindSuccess) {
 			Toast.makeText(this, "Relay driver is ready", Toast.LENGTH_SHORT).show();
 		} else {
